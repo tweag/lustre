@@ -321,7 +321,7 @@ kiblnd_create_peer(lnet_ni_t *ni, kib_peer_t **peerp, lnet_nid_t nid)
 {
 	kib_peer_t	*peer;
 	kib_net_t	*net = ni->ni_data;
-	int		cpt = lnet_cpt_of_nid(nid);
+	int		cpt = lnet_cpt_of_nid(nid, ni);
 	unsigned long   flags;
 
 	LASSERT(net != NULL);
@@ -724,7 +724,7 @@ kiblnd_create_conn(kib_peer_t *peer, struct rdma_cm_id *cmid,
 
 	dev = net->ibn_dev;
 
-	cpt = lnet_cpt_of_nid(peer->ibp_nid);
+	cpt = lnet_cpt_of_nid(peer->ibp_nid, peer->ibp_ni);
 	sched = kiblnd_data.kib_scheds[cpt];
 
 	LASSERT(sched->ibs_nthreads > 0);
@@ -3053,7 +3053,7 @@ kiblnd_startup (lnet_ni_t *ni)
         int                       rc;
 	int			  newdev;
 
-        LASSERT (ni->ni_lnd == &the_o2iblnd);
+        LASSERT (ni->ni_net->net_lnd == &the_o2iblnd);
 
         if (kiblnd_data.kib_init == IBLND_INIT_NOTHING) {
                 rc = kiblnd_base_startup();
@@ -3071,10 +3071,17 @@ kiblnd_startup (lnet_ni_t *ni)
 	do_gettimeofday(&tv);
 	net->ibn_incarnation = (((__u64)tv.tv_sec) * 1000000) + tv.tv_usec;
 
-        ni->ni_peertimeout    = *kiblnd_tunables.kib_peertimeout;
-        ni->ni_maxtxcredits   = *kiblnd_tunables.kib_credits;
-        ni->ni_peertxcredits  = *kiblnd_tunables.kib_peertxcredits;
-        ni->ni_peerrtrcredits = *kiblnd_tunables.kib_peerrtrcredits;
+	if (!ni->ni_net->net_tunables_set) {
+		ni->ni_net->net_peer_timeout =
+			*kiblnd_tunables.kib_peertimeout;
+		ni->ni_net->net_maxtxcredits =
+			*kiblnd_tunables.kib_credits;
+		ni->ni_net->net_peertxcredits =
+			*kiblnd_tunables.kib_peertxcredits;
+		ni->ni_net->net_peerrtrcredits =
+			*kiblnd_tunables.kib_peerrtrcredits;
+		ni->ni_net->net_tunables_set = true;
+	}
 
         if (ni->ni_interfaces[0] != NULL) {
                 /* Use the IPoIB interface specified in 'networks=' */

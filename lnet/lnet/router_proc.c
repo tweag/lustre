@@ -497,7 +497,7 @@ proc_lnet_peers(struct ctl_table *table, int write, void __user *buffer,
                         int        nrefs     = peer->lp_refcount;
                         int        lastalive = -1;
                         char      *aliveness = "NA";
-                        int        maxcr     = peer->lp_ni->ni_peertxcredits;
+                        int        maxcr     = peer->lp_net->net_peertxcredits;
                         int        txcr      = peer->lp_txcredits;
                         int        mintxcr   = peer->lp_mintxcredits;
                         int        rtrcr     = peer->lp_rtrcredits;
@@ -658,27 +658,14 @@ proc_lnet_nis(struct ctl_table *table, int write, void __user *buffer,
                               "rtr", "max", "tx", "min");
                 LASSERT (tmpstr + tmpsiz - s > 0);
         } else {
-		struct list_head  *n;
                 lnet_ni_t         *ni   = NULL;
                 int                skip = *ppos - 1;
 
 		lnet_net_lock(0);
 
-                n = the_lnet.ln_nis.next;
+		ni = lnet_get_ni_idx_locked(skip);
 
-		while (n != &the_lnet.ln_nis) {
-			lnet_ni_t *a_ni = list_entry(n, lnet_ni_t, ni_list);
-
-                        if (skip == 0) {
-                                ni = a_ni;
-                                break;
-                        }
-
-                        skip--;
-                        n = n->next;
-                }
-
-                if (ni != NULL) {
+		if (ni != NULL) {
 			struct lnet_tx_queue	*tq;
 			char	*stat;
 			long	now = cfs_time_current_sec();
@@ -690,7 +677,7 @@ proc_lnet_nis(struct ctl_table *table, int write, void __user *buffer,
 				last_alive = now - ni->ni_last_alive;
 
 			/* @lo forever alive */
-			if (ni->ni_lnd->lnd_type == LOLND)
+			if (ni->ni_net->net_lnd->lnd_type == LOLND)
 				last_alive = 0;
 
 			lnet_ni_lock(ni);
@@ -718,8 +705,8 @@ proc_lnet_nis(struct ctl_table *table, int write, void __user *buffer,
 				      "%-24s %6s %5d %4d %4d %4d %5d %5d %5d\n",
 				      libcfs_nid2str(ni->ni_nid), stat,
 				      last_alive, *ni->ni_refs[i],
-				      ni->ni_peertxcredits,
-				      ni->ni_peerrtrcredits,
+				      ni->ni_net->net_peertxcredits,
+				      ni->ni_net->net_peerrtrcredits,
 				      tq->tq_credits_max,
 				      tq->tq_credits, tq->tq_credits_min);
 				if (i != 0)

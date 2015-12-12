@@ -102,7 +102,7 @@ ksocknal_destroy_route (ksock_route_t *route)
 static int
 ksocknal_create_peer(ksock_peer_t **peerp, lnet_ni_t *ni, lnet_process_id_t id)
 {
-	int		cpt = lnet_cpt_of_nid(id.nid);
+	int		cpt = lnet_cpt_of_nid(id.nid, ni);
 	ksock_net_t	*net = ni->ni_data;
 	ksock_peer_t	*peer;
 
@@ -1123,7 +1123,7 @@ ksocknal_create_conn(lnet_ni_t *ni, ksock_route_t *route,
         LASSERT (conn->ksnc_proto != NULL);
         LASSERT (peerid.nid != LNET_NID_ANY);
 
-	cpt = lnet_cpt_of_nid(peerid.nid);
+	cpt = lnet_cpt_of_nid(peerid.nid, ni);
 
         if (active) {
                 ksocknal_peer_addref(peer);
@@ -2786,7 +2786,7 @@ ksocknal_startup (lnet_ni_t *ni)
         int           rc;
         int           i;
 
-        LASSERT (ni->ni_lnd == &the_ksocklnd);
+        LASSERT (ni->ni_net->net_lnd == &the_ksocklnd);
 
         if (ksocknal_data.ksnd_init == SOCKNAL_INIT_NOTHING) {
                 rc = ksocknal_base_startup();
@@ -2801,10 +2801,17 @@ ksocknal_startup (lnet_ni_t *ni)
 	spin_lock_init(&net->ksnn_lock);
         net->ksnn_incarnation = ksocknal_new_incarnation();
         ni->ni_data = net;
-        ni->ni_peertimeout    = *ksocknal_tunables.ksnd_peertimeout;
-        ni->ni_maxtxcredits   = *ksocknal_tunables.ksnd_credits;
-        ni->ni_peertxcredits  = *ksocknal_tunables.ksnd_peertxcredits;
-        ni->ni_peerrtrcredits = *ksocknal_tunables.ksnd_peerrtrcredits;
+	if (!ni->ni_net->net_tunables_set) {
+		ni->ni_net->net_peer_timeout =
+			*ksocknal_tunables.ksnd_peertimeout;
+		ni->ni_net->net_maxtxcredits =
+			*ksocknal_tunables.ksnd_credits;
+		ni->ni_net->net_peertxcredits =
+			*ksocknal_tunables.ksnd_peertxcredits;
+		ni->ni_net->net_peerrtrcredits =
+			*ksocknal_tunables.ksnd_peerrtrcredits;
+		ni->ni_net->net_tunables_set = true;
+	}
 
         if (ni->ni_interfaces[0] == NULL) {
                 rc = ksocknal_enumerate_interfaces(net);

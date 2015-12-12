@@ -27,7 +27,7 @@
  * Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
  * Use is subject to license terms.
  *
- * Copyright (c) 2012, 2015, Intel Corporation.
+ * Copyright (c) 2012, 2015, 2016 Intel Corporation.
  */
 /*
  * This file is part of Lustre, http://www.lustre.org/
@@ -118,7 +118,7 @@ kiblnd_get_idle_tx(lnet_ni_t *ni, lnet_nid_t target)
 	kib_tx_t		*tx;
 	kib_tx_poolset_t	*tps;
 
-	tps = net->ibn_tx_ps[lnet_cpt_of_nid(target)];
+	tps = net->ibn_tx_ps[lnet_cpt_of_nid(target, ni)];
 	node = kiblnd_pool_alloc_node(&tps->tps_poolset);
         if (node == NULL)
                 return NULL;
@@ -2256,75 +2256,75 @@ kiblnd_passive_connect(struct rdma_cm_id *cmid, void *priv, int priv_nob)
 		__u32 ip = ntohl(peer_addr->sin_addr.s_addr);
 		CERROR("Peer's port (%pI4h:%hu) is not privileged\n",
 		       &ip, ntohs(peer_addr->sin_port));
-                goto failed;
-        }
+		goto failed;
+	}
 
-        if (priv_nob < offsetof(kib_msg_t, ibm_type)) {
-                CERROR("Short connection request\n");
-                goto failed;
-        }
+	if (priv_nob < offsetof(kib_msg_t, ibm_type)) {
+		CERROR("Short connection request\n");
+		goto failed;
+	}
 
-        /* Future protocol version compatibility support!  If the
-         * o2iblnd-specific protocol changes, or when LNET unifies
-         * protocols over all LNDs, the initial connection will
-         * negotiate a protocol version.  I trap this here to avoid
-         * console errors; the reject tells the peer which protocol I
-         * speak. */
-        if (reqmsg->ibm_magic == LNET_PROTO_MAGIC ||
-            reqmsg->ibm_magic == __swab32(LNET_PROTO_MAGIC))
-                goto failed;
-        if (reqmsg->ibm_magic == IBLND_MSG_MAGIC &&
-            reqmsg->ibm_version != IBLND_MSG_VERSION &&
-            reqmsg->ibm_version != IBLND_MSG_VERSION_1)
-                goto failed;
-        if (reqmsg->ibm_magic == __swab32(IBLND_MSG_MAGIC) &&
-            reqmsg->ibm_version != __swab16(IBLND_MSG_VERSION) &&
-            reqmsg->ibm_version != __swab16(IBLND_MSG_VERSION_1))
-                goto failed;
+	/* Future protocol version compatibility support!  If the
+	 * o2iblnd-specific protocol changes, or when LNET unifies
+	 * protocols over all LNDs, the initial connection will
+	 * negotiate a protocol version.  I trap this here to avoid
+	 * console errors; the reject tells the peer which protocol I
+	 * speak. */
+	if (reqmsg->ibm_magic == LNET_PROTO_MAGIC ||
+	    reqmsg->ibm_magic == __swab32(LNET_PROTO_MAGIC))
+		goto failed;
+	if (reqmsg->ibm_magic == IBLND_MSG_MAGIC &&
+	    reqmsg->ibm_version != IBLND_MSG_VERSION &&
+	    reqmsg->ibm_version != IBLND_MSG_VERSION_1)
+		goto failed;
+	if (reqmsg->ibm_magic == __swab32(IBLND_MSG_MAGIC) &&
+	    reqmsg->ibm_version != __swab16(IBLND_MSG_VERSION) &&
+	    reqmsg->ibm_version != __swab16(IBLND_MSG_VERSION_1))
+		goto failed;
 
-        rc = kiblnd_unpack_msg(reqmsg, priv_nob);
-        if (rc != 0) {
-                CERROR("Can't parse connection request: %d\n", rc);
-                goto failed;
-        }
+	rc = kiblnd_unpack_msg(reqmsg, priv_nob);
+	if (rc != 0) {
+		CERROR("Can't parse connection request: %d\n", rc);
+		goto failed;
+	}
 
-        nid = reqmsg->ibm_srcnid;
-        ni  = lnet_net2ni(LNET_NIDNET(reqmsg->ibm_dstnid));
+	nid = reqmsg->ibm_srcnid;
+	ni  = lnet_nid2ni_addref(reqmsg->ibm_dstnid);
 
-        if (ni != NULL) {
-                net = (kib_net_t *)ni->ni_data;
-                rej.ibr_incarnation = net->ibn_incarnation;
-        }
+	if (ni != NULL) {
+		net = (kib_net_t *)ni->ni_data;
+		rej.ibr_incarnation = net->ibn_incarnation;
+	}
 
-        if (ni == NULL ||                         /* no matching net */
-            ni->ni_nid != reqmsg->ibm_dstnid ||   /* right NET, wrong NID! */
-            net->ibn_dev != ibdev) {              /* wrong device */
+	if (ni == NULL ||                         /* no matching net */
+	    ni->ni_nid != reqmsg->ibm_dstnid ||   /* right NET, wrong NID! */
+	    net->ibn_dev != ibdev) {              /* wrong device */
 		CERROR("Can't accept conn from %s on %s (%s:%d:%pI4h): "
-                       "bad dst nid %s\n", libcfs_nid2str(nid),
-                       ni == NULL ? "NA" : libcfs_nid2str(ni->ni_nid),
-                       ibdev->ibd_ifname, ibdev->ibd_nnets,
+		       "bad dst nid %s\n", libcfs_nid2str(nid),
+		       ni == NULL ? "NA" : libcfs_nid2str(ni->ni_nid),
+		       ibdev->ibd_ifname, ibdev->ibd_nnets,
 			&ibdev->ibd_ifip,
-                       libcfs_nid2str(reqmsg->ibm_dstnid));
+		       libcfs_nid2str(reqmsg->ibm_dstnid));
 
-                goto failed;
-        }
+		goto failed;
+	}
 
        /* check time stamp as soon as possible */
-        if (reqmsg->ibm_dststamp != 0 &&
-            reqmsg->ibm_dststamp != net->ibn_incarnation) {
-                CWARN("Stale connection request\n");
-                rej.ibr_why = IBLND_REJECT_CONN_STALE;
-                goto failed;
-        }
+	if (reqmsg->ibm_dststamp != 0 &&
+	    reqmsg->ibm_dststamp != net->ibn_incarnation) {
+		CWARN("Stale connection request\n");
+		rej.ibr_why = IBLND_REJECT_CONN_STALE;
+		goto failed;
+	}
 
-        /* I can accept peer's version */
-        version = reqmsg->ibm_version;
+	/* I can accept peer's version */
+	version = reqmsg->ibm_version;
 
-        if (reqmsg->ibm_type != IBLND_MSG_CONNREQ) {
-                CERROR("Unexpected connreq msg type: %x from %s\n",
-                       reqmsg->ibm_type, libcfs_nid2str(nid));
-                goto failed;
-        }
+	if (reqmsg->ibm_type != IBLND_MSG_CONNREQ) {
+		CERROR("Unexpected connreq msg type: %x from %s\n",
+		       reqmsg->ibm_type, libcfs_nid2str(nid));
+		goto failed;
+	}
 
 	if (reqmsg->ibm_u.connparams.ibcp_queue_depth >
 	    IBLND_MSG_QUEUE_SIZE(version)) {

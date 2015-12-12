@@ -27,7 +27,7 @@
  * Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
  * Use is subject to license terms.
  *
- * Copyright (c) 2011, 2015, Intel Corporation.
+ * Copyright (c) 2011, 2015, 2016 Intel Corporation.
  */
 /*
  * This file is part of Lustre, http://www.lustre.org/
@@ -314,21 +314,21 @@ lnet_accept(struct socket *sock, __u32 magic)
                 return -EIO;
         }
 
-        if (flip)
-                __swab64s(&cr.acr_nid);
+	if (flip)
+		__swab64s(&cr.acr_nid);
 
-        ni = lnet_net2ni(LNET_NIDNET(cr.acr_nid));
-        if (ni == NULL ||               /* no matching net */
-            ni->ni_nid != cr.acr_nid) { /* right NET, wrong NID! */
-                if (ni != NULL)
-                        lnet_ni_decref(ni);
+	ni = lnet_nid2ni_addref(cr.acr_nid);
+	if (ni == NULL ||               /* no matching net */
+	    ni->ni_nid != cr.acr_nid) { /* right NET, wrong NID! */
+		if (ni != NULL)
+			lnet_ni_decref(ni);
 		LCONSOLE_ERROR_MSG(0x120, "Refusing connection from %pI4h "
 				   "for %s: No matching NI\n",
 				   &peer_ip, libcfs_nid2str(cr.acr_nid));
-                return -EPERM;
-        }
+		return -EPERM;
+	}
 
-        if (ni->ni_lnd->lnd_accept == NULL) {
+        if (ni->ni_net->net_lnd->lnd_accept == NULL) {
                 /* This catches a request for the loopback LND */
                 lnet_ni_decref(ni);
 		LCONSOLE_ERROR_MSG(0x121, "Refusing connection from %pI4h "
@@ -340,7 +340,7 @@ lnet_accept(struct socket *sock, __u32 magic)
 	CDEBUG(D_NET, "Accept %s from %pI4h\n",
 	       libcfs_nid2str(cr.acr_nid), &peer_ip);
 
-        rc = ni->ni_lnd->lnd_accept(ni, sock);
+        rc = ni->ni_net->net_lnd->lnd_accept(ni, sock);
 
         lnet_ni_decref(ni);
         return rc;
@@ -483,7 +483,7 @@ lnet_acceptor_start(void)
 	if (rc <= 0)
 		return rc;
 
-	if (lnet_count_acceptor_nis() == 0)  /* not required */
+	if (lnet_count_acceptor_nets() == 0)  /* not required */
 		return 0;
 
 	task = kthread_run(lnet_acceptor, (void *)(ulong_ptr_t)secure,
