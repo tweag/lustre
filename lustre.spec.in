@@ -91,7 +91,7 @@ URL: https://wiki.hpdd.intel.com/
 BuildRoot: %{_tmppath}/lustre-%{version}-root
 Obsoletes: lustre-lite, lustre-lite-utils, lustre-ldap nfs-utils-lustre
 Provides: lustre-lite = %{version}, lustre-lite-utils = %{version}
-Requires: %{name}-modules = %{version}
+Requires: kmod-%{name} = %{version}
 BuildRequires: libtool
 %if %{with servers}
 Requires: lustre-osd
@@ -109,7 +109,7 @@ Requires: libselinux
 Userspace tools and files for the Lustre file system.
 
 %if %{with lustre_modules}
-%package modules
+%package -n kmod-%{name}
 Summary: Kernel Lustre modules for Linux %{kversion}
 # for SLES11, we need nothing here
 %if %{_vendor}=="redhat" || %{_vendor}=="fedora"
@@ -125,7 +125,7 @@ BuildRequires: libyaml-devel
 %endif
 Group: Development/Kernel
 
-%description modules
+%description -n kmod-%{name}
 Lustre file system, server and network drivers for Linux %{kversion}.
 
 %if %{with ldiskfs}
@@ -216,7 +216,7 @@ Obsoletes: %{name}-headers
 %if %{with build_kmod}
 Requires: kmod-%{name} = %{version}
 %else
-Requires: %{name}-modules = %{version}
+Requires: kmod-%{name} = %{version}
 %endif
 Requires: %{name} = %{version}
 
@@ -249,7 +249,7 @@ systems.
 Summary: Lustre testing framework
 Group: Development/Kernel
 Provides: %{name}-tests = %{version}
-Requires: %{name} = %{version}, %{name}-modules = %{version}, lustre-iokit
+Requires: %{name} = %{version}, kmod-%{name} = %{version}, lustre-iokit
 Requires: attr, rsync, perl, lsof, /usr/bin/getconf
 
 %description tests
@@ -488,7 +488,7 @@ echo '/lib/modules/%{kversion}/%{kmoddir}/kernel/fs/@PACKAGE@/llog_test.ko' >>lu
 %config(noreplace) %{_sysconfdir}/modprobe.d/ko2iblnd.conf
 
 %if %{with lustre_modules}
-%files modules
+%files -n kmod-%{name}
 %defattr(-,root,root)
 /lib/modules/%{kversion}/%{kmoddir}/*
 %if %{with lustre_tests}
@@ -570,14 +570,14 @@ echo '/lib/modules/%{kversion}/%{kmoddir}/kernel/fs/@PACKAGE@/llog_test.ko' >>lu
 %endif
 
 %if %{with lustre_modules}
-%post modules
+%post -n kmod-%{name}
 if [ -f /boot/System.map-%{kversion} ]; then
 	depmod -ae -F /boot/System.map-%{kversion} %{kversion} || exit 0
 else
 	depmod -ae %{kversion} || exit 0
 fi
 
-MODULES_RPM_NAME=$(rpm -q %{name}-modules | grep "%{version}-%{release}")
+MODULES_RPM_NAME=$(rpm -q kmod-%{name} | grep "%{version}-%{release}")
 # "weak modules" support
 # Suse
 if [ -x /usr/lib/module-init-tools/weak-modules ]; then
@@ -679,9 +679,9 @@ if sysctl kernel.unsupported >/dev/null 2>&1 &&
 fi
 %endif
 
-%preun modules
-MODULES_RPM_NAME=$(rpm -q %{name}-modules | grep "%{version}-%{release}")
-rpm -ql $MODULES_RPM_NAME | grep '\.ko$' > /var/run/%{name}-modules || true
+%preun -n kmod-%{name}
+MODULES_RPM_NAME=$(rpm -q kmod-%{name} | grep "%{version}-%{release}")
+rpm -ql $MODULES_RPM_NAME | grep '\.ko$' > /var/run/kmod-%{name} || true
 
 %if %{with ldiskfs}
 %preun osd-ldiskfs
@@ -695,7 +695,7 @@ OSD_ZFS_RPM_NAME=$(rpm -q %{name}-osd-zfs | grep "%{version}-%{release}")
 rpm -ql $OSD_ZFS_RPM_NAME | grep '\.ko$' > /var/run/%{name}-osd-zfs || true
 %endif
 
-%postun modules
+%postun -n kmod-%{name}
 if [ -f /boot/System.map-%{kversion} ]; then
 	depmod -ae -F /boot/System.map-%{kversion} %{kversion} || exit 0
 else
@@ -705,15 +705,15 @@ fi
 # "weak modules" support
 # Suse
 if [ -x /usr/lib/module-init-tools/weak-modules ]; then
-    cat /var/run/%{name}-modules |
+    cat /var/run/kmod-%{name} |
         /usr/lib/module-init-tools/weak-modules --remove-modules
 fi
 # RedHat
 if [ -x /sbin/weak-modules ]; then
-    cat /var/run/%{name}-modules |
+    cat /var/run/kmod-%{name} |
         /sbin/weak-modules --remove-modules
 fi
-rm /var/run/%{name}-modules
+rm /var/run/kmod-%{name}
 
 %if %{with ldiskfs}
 %postun osd-ldiskfs
